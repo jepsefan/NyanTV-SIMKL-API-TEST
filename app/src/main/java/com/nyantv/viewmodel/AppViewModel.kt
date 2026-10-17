@@ -144,6 +144,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
         simklLatestJob?.cancel()
         _simklLatestEpisodes.value = emptyList()
+        _simklLatestComparison.value = null
         _simklLatestDiagnostic.value = "Not loaded"
         (_service as? SimklService)?.cancelDeviceLogin()
         serviceJobs.forEach { it.cancel() }
@@ -246,6 +247,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     val simklLatestLocalFiltering: StateFlow<Boolean> = _simklLatestLocalFiltering.asStateFlow()
     private val _simklLatestEpisodes = MutableStateFlow<List<SimklLatestEpisode>>(emptyList())
     val simklLatestEpisodes: StateFlow<List<SimklLatestEpisode>> = _simklLatestEpisodes.asStateFlow()
+    private val _simklLatestComparison = MutableStateFlow<SimklLatestUnwatchedResult?>(null)
+    val simklLatestComparison: StateFlow<SimklLatestUnwatchedResult?> = _simklLatestComparison.asStateFlow()
     private val _simklLatestLoading = MutableStateFlow(false)
     val simklLatestLoading: StateFlow<Boolean> = _simklLatestLoading.asStateFlow()
     private val _simklLatestDiagnostic = MutableStateFlow("Not loaded")
@@ -276,13 +279,16 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                     _simklLatestLocalFiltering.value
                 )
                 _simklLatestEpisodes.value = result.episodes
+                _simklLatestComparison.value = result
                 _simklLatestDiagnostic.value =
-                    "${result.path} | filter: ${if (_simklLatestLocalFiltering.value) "local" else "API"}" +
-                        " | returned: ${result.returnedShows} shows / ${result.returnedAnime} anime" +
-                        " | excluded anime: ${result.excludedAnime} | eligible: ${result.episodes.size}"
+                    "Selected: ${if (_simklLatestLocalFiltering.value) "local" else "API"}" +
+                        " | API: ${result.apiEpisodes.size} eligible (${result.apiReturnedShows} returned)" +
+                        " | local: ${result.localEpisodes.size} eligible (${result.localReturnedShows} returned)" +
+                        " | anime hidden: ${result.excludedAnime} | displayed: ${result.episodes.size}"
             } catch (e: Exception) {
                 if (e is kotlinx.coroutines.CancellationException) throw e
                 _simklLatestEpisodes.value = emptyList()
+                _simklLatestComparison.value = null
                 _simklLatestDiagnostic.value = "API error: ${e.message}"
             } finally {
                 _simklLatestLoading.value = false
