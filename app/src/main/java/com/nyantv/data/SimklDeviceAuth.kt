@@ -9,6 +9,7 @@ import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.*
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import okhttp3.HttpUrl.Companion.toHttpUrl
 import kotlin.coroutines.coroutineContext
 
 data class SimklDeviceSession(
@@ -35,11 +36,16 @@ internal object SimklDeviceAuth {
     private suspend fun get(path: String): HttpResult = withContext(Dispatchers.IO) {
         val clientId = BuildConfig.SIMKL_CLIENT_ID
         require(clientId.isNotBlank()) { "SIMKL_CLIENT_ID is missing from this build" }
-        val separator = if ("?" in path) "&" else "?"
-        val url = "$API$path" + separator + "client_id=" + clientId
+        // Simkl's documented query-parameter form, with the app identity headers.
+        val url = "$API$path".toHttpUrl().newBuilder()
+            .addQueryParameter("client_id", clientId)
+            .addQueryParameter("app-name", "nyantv")
+            .addQueryParameter("app-version", BuildConfig.VERSION_NAME)
+            .build()
         val request = Request.Builder()
             .url(url)
-            .header("simkl-api-key", clientId)
+            .header("User-Agent", "NyanTV/${BuildConfig.VERSION_NAME} (Android TV)")
+            .header("Accept", "application/json")
             .get()
             .build()
         client.newCall(request).execute().use { response ->
@@ -56,21 +62,35 @@ internal object SimklDeviceAuth {
     private fun JsonObject.number(key: String, fallback: Int): Int =
         (get(key) as? JsonPrimitive)?.intOrNull ?: fallback
 
+    // Return only server-authored error fields, never credentials or raw response bodies.
+    private fun HttpResult.details(): String =
+        listOfNotNull(
+            body.string("error_description"),
+            body.string("message"),
+            body.string("error")
+        ).firstOrNull { it.isNotBlank() }?.take(180) ?: "No error details returned"
+
     suspend fun request(): SimklDeviceSession {
         val result = get("/oauth/pin")
         if (result.status !in 200..299 || result.body.string("result") != "OK") {
-            error("Simkl PIN request failed: HTTP ${result.status}")
+            error("Simkl PIN request failed: HTTP ${result.status} — ${result.details()}")
         }
         val code = result.body.string("user_code")?.takeIf { it.isNotBlank() }
             ?: error("Simkl did not return a PIN")
         val url = result.body.string("verification_uri")
             ?: result.body.string("verification_url") ?: "https://simkl.com/pin"
         require(url.startsWith("https://simkl.com/")) { "Unexpected verification URL" }
+        require(code.matches(Regex("[A-Za-z0-9-]{4,16}"))) { "Unexpected PIN format" }
+        // Pre-fill the PIN on the phone, just as in the AnimeStream login screen.
+        val qrUrl = url.toHttpUrl().newBuilder()
+            .addQueryParameter("user_code", code)
+            .build()
+            .toString()
         return SimklDeviceSession(
             userCode = code,
             deviceCode = result.body.string("device_code").orEmpty(),
             verificationUrl = url,
-            qrUrl = url,
+            qrUrl = qrUrl,
             expiresIn = result.body.number("expires_in", 900).coerceIn(60, 1800),
             interval = result.body.number("interval", 5).coerceAtLeast(5)
         )
@@ -95,7 +115,7 @@ internal object SimklDeviceAuth {
             if (result.body.string("device_code") != null) {
                 error("Simkl PIN is no longer valid. Request a new code.")
             }
-            if (result.status !in 200..299) error("Simkl PIN polling failed: HTTP ${result.status}")
+            if (result.status !in 200..299) error("Simkl PIN polling failed: HTTP ${result.status} — ${result.details()}")
             if (result.body.string("result") != "KO") {
                 error("Unexpected response from Simkl PIN endpoint")
             }
