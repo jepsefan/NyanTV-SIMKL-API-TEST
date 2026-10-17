@@ -73,6 +73,60 @@ class SimklService(context: Context) : MediaService {
     override val upcoming:        StateFlow<List<Media>>        = _upcoming.asStateFlow()
     override val recentlyUpdated: StateFlow<List<Media>>        = _recentlyUpdated.asStateFlow()
 
+    private val _deviceSession = MutableStateFlow<SimklDeviceSession?>(null)
+    val deviceSession: StateFlow<SimklDeviceSession?> = _deviceSession.asStateFlow()
+    private val _deviceStatus = MutableStateFlow("")
+    val deviceStatus: StateFlow<String> = _deviceStatus.asStateFlow()
+    private var deviceJob: kotlinx.coroutines.Job? = null
+
+    fun cancelDeviceLogin() {
+        deviceJob?.cancel()
+        deviceJob = null
+        _deviceSession.value = null
+        _deviceStatus.value = ""
+    }
+
+    fun startDeviceLogin(scope: kotlinx.coroutines.CoroutineScope) {
+        cancelDeviceLogin()
+        deviceJob = scope.launch {
+            _deviceStatus.value = "Requesting a Simkl login code…"
+            try {
+                val session = SimklDeviceAuth.request()
+                _deviceSession.value = session
+                _deviceStatus.value = "Scan the QR code or enter the code on your phone"
+                val credentials = SimklDeviceAuth.poll(session) { _deviceStatus.value = it }
+                token = credentials.accessToken
+                prefs.edit {
+                    putString("access_token", credentials.accessToken)
+                    credentials.refreshToken?.let { putString("refresh_token", it) }
+                    putLong("token_expires_at", System.currentTimeMillis() + credentials.expiresIn * 1000L)
+                }
+                _isLoggedIn.value = true
+                _deviceStatus.value = "Connected to Simkl"
+                _deviceSession.value = null
+                fetchUserProfile()
+                refreshUserLists()
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                _deviceStatus.value = e.message ?: "Simkl login failed"
+            }
+        }
+    }
+
+    private suspend fun refreshDeviceTokenIfNeeded() {
+        val refreshToken = prefs.getString("refresh_token", null) ?: return
+        val expiry = prefs.getLong("token_expires_at", 0)
+        if (expiry == 0L || System.currentTimeMillis() < expiry - 12L * 60L * 60L * 1000L) return
+        val credentials = SimklDeviceAuth.refresh(refreshToken)
+        token = credentials.accessToken
+        prefs.edit {
+            putString("access_token", credentials.accessToken)
+            credentials.refreshToken?.let { putString("refresh_token", it) }
+            putLong("token_expires_at", System.currentTimeMillis() + credentials.expiresIn * 1000L)
+        }
+    }
+
     // ── Auth ───────────────────────────────────────────────────────────────────
 
     override suspend fun login(context: Context) {
@@ -93,7 +147,7 @@ class SimklService(context: Context) : MediaService {
         }
         android.util.Log.d("SimklService", "posting to $SIMKL_API/oauth/token")
         val resp = postJson("$SIMKL_API/oauth/token", body) ?: return@withContext
-        android.util.Log.d("SimklService", "response: $resp")
+        // Never log OAuth tokens.
         token = resp["access_token"]!!.jsonPrimitive.content
         prefs.edit { putString("access_token", token) }
         _isLoggedIn.value = true
@@ -102,8 +156,9 @@ class SimklService(context: Context) : MediaService {
     }
 
     override suspend fun logout() {
+        cancelDeviceLogin()
         token = null
-        prefs.edit { remove("access_token") }
+        prefs.edit { remove("access_token"); remove("refresh_token"); remove("token_expires_at") }
         _isLoggedIn.value = false
         _profile.value   = null
         _animeList.value = emptyList()
@@ -113,6 +168,7 @@ class SimklService(context: Context) : MediaService {
         if (token == null) return
         withContext(Dispatchers.IO) {
             runCatching {
+                refreshDeviceTokenIfNeeded()
                 coroutineScope {
                     launch { fetchUserProfile() }
                     launch { refreshUserLists() }
