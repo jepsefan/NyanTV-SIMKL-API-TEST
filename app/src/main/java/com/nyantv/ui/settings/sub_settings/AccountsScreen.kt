@@ -15,6 +15,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.foundation.Image
+import androidx.compose.ui.graphics.ImageBitmap
+import android.graphics.Bitmap
+import com.google.zxing.BarcodeFormat
+import com.google.zxing.qrcode.QRCodeWriter
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -33,6 +39,68 @@ fun AccountsScreen(vm: AppViewModel, navController: NavController) {
     val loggedIn by vm.isLoggedIn.collectAsStateWithLifecycle()
     val profile  by vm.profile.collectAsStateWithLifecycle()
     val service  by vm.serviceType.collectAsStateWithLifecycle()
+    val simklSession by vm.simklDeviceSession.collectAsStateWithLifecycle()
+    val simklStatus by vm.simklDeviceStatus.collectAsStateWithLifecycle()
+    var showSimklLogin by remember { mutableStateOf(false) }
+
+    if (service == ServiceType.SIMKL && showSimklLogin && !loggedIn) {
+        AlertDialog(
+            onDismissRequest = {
+                showSimklLogin = false
+                vm.cancelSimklDeviceLogin()
+            },
+            title = { Text("Connect to Simkl") },
+            text = {
+                Column(
+                    modifier = Modifier.widthIn(min = 280.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    val session = simklSession
+                    if (session != null) {
+                        val qrBitmap = remember(session.qrUrl) {
+                            runCatching {
+                                val bits = QRCodeWriter().encode(session.qrUrl, BarcodeFormat.QR_CODE, 300, 300)
+                                val pixels = IntArray(300 * 300) { index ->
+                                    if (bits[index % 300, index / 300]) android.graphics.Color.BLACK
+                                    else android.graphics.Color.WHITE
+                                }
+                                Bitmap.createBitmap(pixels, 300, 300, Bitmap.Config.ARGB_8888)
+                                    .apply { setPixels(pixels, 0, 300, 0, 0, 300, 300) }
+                                    .asImageBitmap()
+                            }.getOrNull()
+                        }
+                        qrBitmap?.let { bitmap ->
+                            Image(bitmap = bitmap, contentDescription = "Simkl activation QR code",
+                                modifier = Modifier.size(220.dp))
+                        }
+                        Text(session.verificationUrl, style = MaterialTheme.typography.bodyMedium)
+                        Text(session.userCode, style = MaterialTheme.typography.headlineMedium,
+                            fontWeight = FontWeight.Bold)
+                        Text("Enter this code on your phone if the QR link asks for it.",
+                            style = MaterialTheme.typography.bodySmall)
+                    } else if (simklStatus.isBlank() || simklStatus.startsWith("Requesting")) {
+                        CircularProgressIndicator()
+                    }
+                    Text(simklStatus, style = MaterialTheme.typography.bodySmall)
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { vm.startSimklDeviceLogin() }) { Text("New code") }
+            },
+            dismissButton = {
+                TextButton(onClick = {
+                    showSimklLogin = false
+                    vm.cancelSimklDeviceLogin()
+                }) { Text("Cancel") }
+            }
+        )
+    }
+
+    LaunchedEffect(loggedIn) {
+        if (loggedIn) showSimklLogin = false
+    }
+
 
     Column(
         modifier = Modifier
@@ -76,7 +144,12 @@ fun AccountsScreen(vm: AppViewModel, navController: NavController) {
                     Icon(Icons.Filled.Person, null, modifier = Modifier.size(40.dp), tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f))
                     Text("Not logged in", modifier = Modifier.weight(1f), color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
                     CompositionLocalProvider(LocalMinimumInteractiveComponentSize provides 0.dp) {
-                        Button(onClick = { vm.login(context) }, modifier = Modifier.focusBorder(CircleShape)) {
+                        Button(onClick = {
+                            if (service == ServiceType.SIMKL) {
+                                showSimklLogin = true
+                                vm.startSimklDeviceLogin()
+                            } else vm.login(context)
+                        }, modifier = Modifier.focusBorder(CircleShape)) {
                             Text("Login")
                         }
                     }
