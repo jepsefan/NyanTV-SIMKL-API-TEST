@@ -284,6 +284,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     private val _simklShowPlanMovies = MutableStateFlow(prefs.getBoolean("simkl_plan_movies",     false))
     private val _simklShowContSeries = MutableStateFlow(prefs.getBoolean("simkl_cont_series",     true))
     private val _simklShowPlanSeries = MutableStateFlow(prefs.getBoolean("simkl_plan_series",     false))
+    private val _simklShowAnime = MutableStateFlow(prefs.getBoolean("simkl_show_anime", true))
 
     val anilistShowContinue: StateFlow<Boolean> = _anilistShowContinue.asStateFlow()
     val anilistShowPlanned:  StateFlow<Boolean> = _anilistShowPlanned.asStateFlow()
@@ -293,6 +294,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     val simklShowPlanMovies: StateFlow<Boolean> = _simklShowPlanMovies.asStateFlow()
     val simklShowContSeries: StateFlow<Boolean> = _simklShowContSeries.asStateFlow()
     val simklShowPlanSeries: StateFlow<Boolean> = _simklShowPlanSeries.asStateFlow()
+    val simklShowAnime: StateFlow<Boolean> = _simklShowAnime.asStateFlow()
 
     fun setAnilistShowContinue(v: Boolean) { _anilistShowContinue.value = v; prefs.edit { putBoolean("anilist_show_continue", v) } }
     fun setAnilistShowPlanned(v: Boolean)  { _anilistShowPlanned.value  = v; prefs.edit { putBoolean("anilist_show_planned",  v) } }
@@ -302,6 +304,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun setSimklShowPlanMovies(v: Boolean) { _simklShowPlanMovies.value = v; prefs.edit { putBoolean("simkl_plan_movies",     v) } }
     fun setSimklShowContSeries(v: Boolean) { _simklShowContSeries.value = v; prefs.edit { putBoolean("simkl_cont_series",     v) } }
     fun setSimklShowPlanSeries(v: Boolean) { _simklShowPlanSeries.value = v; prefs.edit { putBoolean("simkl_plan_series",     v) } }
+    fun setSimklShowAnime(v: Boolean) { _simklShowAnime.value = v; prefs.edit { putBoolean("simkl_show_anime", v) } }
 
     // ── Actions ────────────────────────────────────────────────────────────────
 
