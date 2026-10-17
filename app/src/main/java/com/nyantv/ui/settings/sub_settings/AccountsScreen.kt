@@ -74,11 +74,11 @@ fun AccountsScreen(vm: AppViewModel, navController: NavController) {
                             Image(bitmap = bitmap, contentDescription = "Simkl activation QR code",
                                 modifier = Modifier.size(220.dp))
                         }
-                        Text("Scan the QR code or open Simkl and approve this login.", style = MaterialTheme.typography.bodyMedium)
+                        Text("Scan the QR code, then approve this device in Simkl.", style = MaterialTheme.typography.bodyMedium)
                         Text(session.qrUrl, style = MaterialTheme.typography.bodySmall)
                         Text(session.userCode, style = MaterialTheme.typography.headlineLarge,
                             fontWeight = FontWeight.Bold)
-                        Text("Open simkl.com/pin to enter this code if needed.",
+                        Text("Open the verification link to enter this code if needed.",
                             style = MaterialTheme.typography.bodySmall)
                     } else if (simklStatus.isBlank() || simklStatus.startsWith("Requesting")) {
                         CircularProgressIndicator()
