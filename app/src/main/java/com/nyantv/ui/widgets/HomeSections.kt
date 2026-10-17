@@ -1,6 +1,14 @@
 package com.nyantv.ui.widgets
 
 import androidx.compose.runtime.Composable
+import androidx.compose.foundation.layout.*
+import androidx.compose.material3.*
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.Alignment
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
@@ -70,6 +78,66 @@ fun HomeSections(vm: AppViewModel, navController: NavController, onDetailClick: 
         }
 
         ServiceType.SIMKL -> {
+            val onlyShows by vm.simklLatestOnlyShows.collectAsStateWithLifecycle()
+            val episodes by vm.simklLatestEpisodes.collectAsStateWithLifecycle()
+            val loading by vm.simklLatestLoading.collectAsStateWithLifecycle()
+            val diagnostic by vm.simklLatestDiagnostic.collectAsStateWithLifecycle()
+            val loggedIn by vm.isLoggedIn.collectAsStateWithLifecycle()
+
+            LaunchedEffect(loggedIn, service) {
+                if (loggedIn) vm.refreshSimklLatest()
+            }
+
+            Column(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Text("Latest Unwatched Episodes · API test", style = MaterialTheme.typography.titleMedium)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("Exclude anime (shows only)", modifier = Modifier.weight(1f))
+                    Switch(
+                        checked = onlyShows,
+                        onCheckedChange = { vm.setSimklLatestOnlyShows(it) }
+                    )
+                }
+                Text(
+                    if (onlyShows) "Shows only" else "Shows + Anime",
+                    style = MaterialTheme.typography.labelMedium
+                )
+                Text(diagnostic, style = MaterialTheme.typography.bodySmall)
+                Button(onClick = { vm.refreshSimklLatest() }, enabled = !loading && loggedIn) {
+                    Text(if (loading) "Loading..." else "Retry API call")
+                }
+                if (!loading && episodes.isEmpty()) {
+                    Text("No eligible aired unwatched episodes returned.", style = MaterialTheme.typography.bodySmall)
+                }
+            }
+            if (episodes.isNotEmpty()) {
+                SectionRow(
+                    title = "Latest Unwatched Episodes",
+                    items = episodes.map { it.media },
+                    onItemClick = { navigate(it.id) },
+                    trackedMap = trackedMap
+                )
+                LazyRow(
+                    contentPadding = PaddingValues(horizontal = 16.dp),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    items(episodes, key = { it.media.id }) { ep ->
+                        Column(modifier = Modifier.width(120.dp)) {
+                            Text(
+                                ep.number + (if (ep.isAnime) " · Anime" else ""),
+                                style = MaterialTheme.typography.labelSmall
+                            )
+                            Text(ep.airDate, style = MaterialTheme.typography.labelSmall)
+                            if (ep.episodeTitle.isNotBlank()) {
+                                Text(ep.episodeTitle, maxLines = 2, style = MaterialTheme.typography.labelSmall)
+                            }
+                        }
+                    }
+                }
+            }
+
             val contMovies = animeList.filter { it.watchingStatus == "CURRENT"  && it.isMovie == true }
             val planMovies = animeList.filter { it.watchingStatus == "PLANNING" && it.isMovie == true }
             val contSeries = animeList.filter { it.watchingStatus == "CURRENT"  && it.isMovie != true }
