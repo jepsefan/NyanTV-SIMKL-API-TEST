@@ -80,6 +80,7 @@ fun HomeSections(vm: AppViewModel, navController: NavController, onDetailClick: 
 
         ServiceType.SIMKL -> {
             val onlyShows by vm.simklLatestOnlyShows.collectAsStateWithLifecycle()
+            val localAnimeFiltering by vm.simklLatestLocalFiltering.collectAsStateWithLifecycle()
             val episodes by vm.simklLatestEpisodes.collectAsStateWithLifecycle()
             val loading by vm.simklLatestLoading.collectAsStateWithLifecycle()
             val diagnostic by vm.simklLatestDiagnostic.collectAsStateWithLifecycle()
@@ -101,8 +102,17 @@ fun HomeSections(vm: AppViewModel, navController: NavController, onDetailClick: 
                         onCheckedChange = { vm.setSimklLatestOnlyShows(it) }
                     )
                 }
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("Local anime filtering", modifier = Modifier.weight(1f))
+                    Switch(
+                        checked = localAnimeFiltering,
+                        onCheckedChange = { vm.setSimklLatestLocalFiltering(it) }
+                    )
+                }
                 Text(
-                    if (onlyShows) "Shows only" else "Shows + Anime",
+                    if (onlyShows) {
+                        if (localAnimeFiltering) "Shows only · local filtering" else "Shows only · API filtering"
+                    } else "Shows + Anime",
                     style = MaterialTheme.typography.labelMedium
                 )
                 Text(diagnostic, style = MaterialTheme.typography.bodySmall)
