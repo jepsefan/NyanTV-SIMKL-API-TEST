@@ -1,6 +1,8 @@
 package com.nyantv.ui.library
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -15,6 +17,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import com.nyantv.data.TrackedMedia
+import com.nyantv.data.ServiceType
 import androidx.compose.ui.Alignment
 import com.nyantv.ui.utils.NetworkStatusContent
 import com.nyantv.ui.TrackedCard
@@ -74,9 +77,18 @@ fun LibraryScreen(vm: AppViewModel, navController: NavController, onDetailClick:
     var sortOrder    by remember { mutableStateOf(LibrarySortOrder.DEFAULT) }
     var sortAsc      by remember { mutableStateOf(true) }
     var sortMenuOpen by remember { mutableStateOf(false) }
+    var mediaCategory by remember(serviceType) { mutableStateOf("All") }
 
-    val grouped = remember(animeList) {
-        STATUS_ORDER.associateWith { status -> animeList.filter { it.watchingStatus == status } }
+    val filteredList = remember(animeList, serviceType, mediaCategory) {
+        if (serviceType != ServiceType.SIMKL) animeList else when (mediaCategory) {
+            "Movies" -> animeList.filter { it.isMovie == true }
+            "TV" -> animeList.filter { it.isMovie != true && !it.isAnime }
+            "Anime" -> animeList.filter { it.isAnime }
+            else -> animeList
+        }
+    }
+    val grouped = remember(filteredList) {
+        STATUS_ORDER.associateWith { status -> filteredList.filter { it.watchingStatus == status } }
     }
     val tabs = STATUS_ORDER.filter { (grouped[it]?.size ?: 0) > 0 }
 
@@ -107,6 +119,18 @@ fun LibraryScreen(vm: AppViewModel, navController: NavController, onDetailClick:
         }
 
         Column(modifier = Modifier.fillMaxSize()) {
+
+            if (serviceType == ServiceType.SIMKL) {
+                Row(modifier = Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    listOf("All", "Movies", "TV", "Anime").forEach { category ->
+                        FilterChip(selected = mediaCategory == category, onClick = { mediaCategory = category; selectedTab = 0 }, label = { Text(category) })
+                    }
+                }
+            }
+            if (tabs.isEmpty()) {
+                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Text("No items in this category") }
+                return@NetworkStatusContent
+            }
 
             // ── Tab row + sort button ───────────────────────────────────────
             Row(
