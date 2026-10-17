@@ -34,7 +34,8 @@ data class SimklLatestUnwatchedResult(
     val episodes: List<SimklLatestEpisode>,
     val path: String,
     val returnedShows: Int,
-    val returnedAnime: Int
+    val returnedAnime: Int,
+    val excludedAnime: Int
 )
 
 private const val SIMKL_API  = "https://api.simkl.com"
@@ -478,8 +479,13 @@ class SimklService(context: Context) : MediaService {
 
     // ── Diagnostic home feed: Simkl next unwatched episodes ────────────────────
     // This read-only experiment does not change the existing watchlists.
-    suspend fun fetchLatestUnwatchedEpisodes(onlyShows: Boolean): SimklLatestUnwatchedResult {
-        val path = if (onlyShows) {
+    suspend fun fetchLatestUnwatchedEpisodes(
+        onlyShows: Boolean,
+        localAnimeFiltering: Boolean
+    ): SimklLatestUnwatchedResult {
+        // Local filtering uses the same API response whether anime is shown or hidden.
+        // API filtering requests the shows-only endpoint only when anime is excluded.
+        val path = if (onlyShows && !localAnimeFiltering) {
             "/sync/all-items/shows/watching?next_watch_info=yes"
         } else {
             "/sync/all-items?next_watch_info=yes"
@@ -538,13 +544,15 @@ class SimklService(context: Context) : MediaService {
         val anime = parse("anime")
         val showCount = (data["shows"] as? JsonArray)?.size ?: 0
         val animeCount = (data["anime"] as? JsonArray)?.size ?: 0
+        val visibleAnime = if (onlyShows) emptyList() else anime
         return SimklLatestUnwatchedResult(
-            episodes = (shows + anime).distinctBy { it.media.id }
+            episodes = (shows + visibleAnime).distinctBy { it.media.id }
                 .sortedWith(compareByDescending<SimklLatestEpisode> { it.airDate }
                     .thenBy { it.media.title }),
             path = path,
             returnedShows = showCount,
-            returnedAnime = animeCount
+            returnedAnime = animeCount,
+            excludedAnime = if (onlyShows) anime.size else 0
         )
     }
 
