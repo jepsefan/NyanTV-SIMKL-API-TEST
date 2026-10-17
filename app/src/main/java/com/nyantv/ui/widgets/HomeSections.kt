@@ -35,6 +35,7 @@ fun HomeSections(vm: AppViewModel, navController: NavController, onDetailClick: 
     val simklPlanMovies by vm.simklShowPlanMovies.collectAsStateWithLifecycle()
     val simklContSeries by vm.simklShowContSeries.collectAsStateWithLifecycle()
     val simklPlanSeries by vm.simklShowPlanSeries.collectAsStateWithLifecycle()
+    val simklShowAnime by vm.simklShowAnime.collectAsStateWithLifecycle()
 
     val trackedMap = animeList.associateBy { it.id }
 
@@ -140,7 +141,7 @@ fun HomeSections(vm: AppViewModel, navController: NavController, onDetailClick: 
 
             val contMovies = animeList.filter { it.watchingStatus == "CURRENT"  && it.isMovie == true }
             val planMovies = animeList.filter { it.watchingStatus == "PLANNING" && it.isMovie == true }
-            val contSeries = animeList.filter { it.watchingStatus == "CURRENT"  && it.isMovie != true }
+            val contSeries = animeList.filter { it.watchingStatus == "CURRENT"  && it.isMovie != true && !it.isAnime }
             val planSeries = animeList.filter { it.watchingStatus == "PLANNING" && it.isMovie != true }
 
             if (simklContMovies && contMovies.isNotEmpty()) {
@@ -154,6 +155,12 @@ fun HomeSections(vm: AppViewModel, navController: NavController, onDetailClick: 
             }
             if (simklPlanSeries && planSeries.isNotEmpty()) {
                 SectionRow(title = "Planned Series", items = planSeries.toMedia(), onItemClick = { navigate(it.id) }, trackedMap = trackedMap)
+            }
+            if (simklShowAnime) {
+                val anime = animeList.filter { it.isAnime }
+                if (anime.isNotEmpty()) {
+                    SectionRow(title = "Simkl Anime", items = anime.toMedia(), onItemClick = { navigate(it.id) }, trackedMap = trackedMap)
+                }
             }
             if (trendingMovies.isNotEmpty()) {
                 SectionRow(title = "Trending Movies", items = trendingMovies, onItemClick = { navigate(it.id) })
