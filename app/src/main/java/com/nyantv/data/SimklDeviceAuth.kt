@@ -39,6 +39,8 @@ internal object SimklDeviceAuth {
         // Simkl's documented query-parameter form, with the app identity headers.
         val url = "$API$path".toHttpUrl().newBuilder()
             .addQueryParameter("client_id", clientId)
+            .addQueryParameter("app-name", "nyantv")
+            .addQueryParameter("app-version", BuildConfig.VERSION_NAME)
             .build()
         val request = Request.Builder()
             .url(url)
