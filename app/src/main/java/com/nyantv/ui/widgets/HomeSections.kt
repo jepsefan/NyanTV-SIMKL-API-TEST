@@ -84,6 +84,7 @@ fun HomeSections(vm: AppViewModel, navController: NavController, onDetailClick: 
             val episodes by vm.simklLatestEpisodes.collectAsStateWithLifecycle()
             val loading by vm.simklLatestLoading.collectAsStateWithLifecycle()
             val diagnostic by vm.simklLatestDiagnostic.collectAsStateWithLifecycle()
+            val comparison by vm.simklLatestComparison.collectAsStateWithLifecycle()
             val loggedIn by vm.isLoggedIn.collectAsStateWithLifecycle()
 
             LaunchedEffect(loggedIn, service) {
@@ -116,6 +117,49 @@ fun HomeSections(vm: AppViewModel, navController: NavController, onDetailClick: 
                     style = MaterialTheme.typography.labelMedium
                 )
                 Text(diagnostic, style = MaterialTheme.typography.bodySmall)
+                comparison?.let { result ->
+                    Text("API filtering: ${result.apiPath}", style = MaterialTheme.typography.labelSmall)
+                    Text("Local filtering: ${result.localPath}", style = MaterialTheme.typography.labelSmall)
+                    Text(
+                        "API: ${result.apiEpisodes.size} episodes · Local: ${result.localEpisodes.size} episodes",
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                    Text(
+                        "Only in API: ${result.onlyInApi.size} · Only in local: ${result.onlyInLocal.size}" +
+                            " · Different next episode: ${result.differentNext.size}",
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                    if (result.onlyInApi.isEmpty() && result.onlyInLocal.isEmpty() &&
+                        result.differentNext.isEmpty()) {
+                        Text("No differences detected between the two shows lists.",
+                            style = MaterialTheme.typography.bodySmall)
+                    } else {
+                        if (result.onlyInApi.isNotEmpty()) {
+                            Text("Only in API-filtered results", style = MaterialTheme.typography.titleSmall)
+                            result.onlyInApi.forEach { entry ->
+                                Text("${entry.media.title} · ${entry.number} · ${entry.airDate}",
+                                    style = MaterialTheme.typography.bodySmall)
+                            }
+                        }
+                        if (result.onlyInLocal.isNotEmpty()) {
+                            Text("Only in locally filtered results", style = MaterialTheme.typography.titleSmall)
+                            result.onlyInLocal.forEach { entry ->
+                                Text("${entry.media.title} · ${entry.number} · ${entry.airDate}",
+                                    style = MaterialTheme.typography.bodySmall)
+                            }
+                        }
+                        if (result.differentNext.isNotEmpty()) {
+                            Text("Different next episodes", style = MaterialTheme.typography.titleSmall)
+                            result.differentNext.forEach { entry ->
+                                Text(
+                                    "${entry.api.media.title}: API ${entry.api.number} (${entry.api.airDate})" +
+                                        " / Local ${entry.local.number} (${entry.local.airDate})",
+                                    style = MaterialTheme.typography.bodySmall
+                                )
+                            }
+                        }
+                    }
+                }
                 Button(onClick = { vm.refreshSimklLatest() }, enabled = !loading && loggedIn) {
                     Text(if (loading) "Loading..." else "Retry API call")
                 }
