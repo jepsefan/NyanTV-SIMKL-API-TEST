@@ -98,6 +98,7 @@ class SimklService(context: Context) : MediaService {
                 token = credentials.accessToken
                 prefs.edit {
                     putString("access_token", credentials.accessToken)
+                    credentials.refreshToken?.let { putString("refresh_token", it) }
                     putLong("token_expires_at", System.currentTimeMillis() + credentials.expiresIn * 1000L)
                 }
                 _isLoggedIn.value = true
@@ -150,10 +151,23 @@ class SimklService(context: Context) : MediaService {
         _animeList.value = emptyList()
     }
 
+    private suspend fun refreshIfNeeded() {
+        val refresh = prefs.getString("refresh_token", null) ?: return
+        if (System.currentTimeMillis() < prefs.getLong("token_expires_at", 0L) - 60000L) return
+        val updated = SimklDeviceAuth.refresh(refresh)
+        token = updated.accessToken
+        prefs.edit {
+            putString("access_token", updated.accessToken)
+            updated.refreshToken?.let { putString("refresh_token", it) }
+            putLong("token_expires_at", System.currentTimeMillis() + updated.expiresIn * 1000L)
+        }
+    }
+
     override suspend fun autoLogin() {
         if (token == null) return
         withContext(Dispatchers.IO) {
             runCatching {
+                refreshIfNeeded()
                 coroutineScope {
                     launch { fetchUserProfile() }
                     launch { refreshUserLists() }
