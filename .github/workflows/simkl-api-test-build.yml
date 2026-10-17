@@ -1,4 +1,4 @@
-name: Simkl API test debug APK
+name: Simkl Beta - Build Debug APK
 on:
   push:
     branches:
@@ -15,11 +15,11 @@ jobs:
           distribution: temurin
           java-version: '17'
           cache: gradle
-      - name: Install Android SDK 35
+      - name: Install Android SDK 36
         uses: android-actions/setup-android@v3
       - name: Install required SDK components
-        run: sdkmanager "platforms;android-35" "build-tools;35.0.0"
-      - name: Build unsigned-for-release debug APK
+        run: sdkmanager "platforms;android-36" "build-tools;36.0.0"
+      - name: Build debug APK
         run: |
           chmod +x gradlew
           ./gradlew assembleDebug --stacktrace
