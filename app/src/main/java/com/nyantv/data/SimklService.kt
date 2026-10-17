@@ -431,7 +431,7 @@ class SimklService(context: Context) : MediaService {
                 val season = next["season"]?.jsonPrimitive?.intOrNull
                 val episode = next["episode"]?.jsonPrimitive?.intOrNull
                 val number = if (type == "anime") {
-                    episode?.let { "E$it" } ?: item["next_to_watch"]?.jsonPrimitive?.contentOrNull.orEmpty()
+                    episode?.let { "E$it" } ?: (item["next_to_watch"] as? JsonPrimitive)?.contentOrNull.orEmpty()
                 } else {
                     if (season != null && episode != null) {
                         "S${season.toString().padStart(2, '0')}E${episode.toString().padStart(2, '0')}"
