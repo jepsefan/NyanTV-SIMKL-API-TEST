@@ -369,6 +369,7 @@ class SimklService(context: Context) : MediaService {
     override suspend fun updateEntry(id: String, status: String?, progress: Int?, score: Float?) =
         withContext(Dispatchers.IO) {
             val isMovie = id.substringAfter("*") == "MOVIE"
+            val category = if (id.endsWith("*ANIME")) "anime" else "shows"
             val simklId = id.substringBefore("*")
             val newStatus = alStatusToSimkl(status ?: "CURRENT")
             val existingEntry = _animeList.value.firstOrNull { it.id == id }
@@ -391,7 +392,7 @@ class SimklService(context: Context) : MediaService {
             } else {
                 if (!alreadyExists || statusChanged) {
                     val statusBody = buildJsonObject {
-                        put("shows", buildJsonArray {
+                        put(category, buildJsonArray {
                             add(buildJsonObject {
                                 put("to", newStatus)
                                 put("ids", buildJsonObject { put("simkl", simklId) })
@@ -403,7 +404,7 @@ class SimklService(context: Context) : MediaService {
 
                 if (isDecreasing) {
                     val removeBody = buildJsonObject {
-                        put("shows", buildJsonArray {
+                        put(category, buildJsonArray {
                             add(buildJsonObject {
                                 put("ids", buildJsonObject { put("simkl", simklId) })
                                 put("seasons", buildJsonArray {
@@ -424,7 +425,7 @@ class SimklService(context: Context) : MediaService {
 
                 if (progress != null && progress > 0) {
                     val addBody = buildJsonObject {
-                        put("shows", buildJsonArray {
+                        put(category, buildJsonArray {
                             add(buildJsonObject {
                                 put("ids", buildJsonObject { put("simkl", simklId) })
                                 put("episodes", buildJsonArray {
@@ -451,7 +452,7 @@ class SimklService(context: Context) : MediaService {
                 add(buildJsonObject { put("ids", buildJsonObject { put("simkl", simklId) }) })
             })
         } else buildJsonObject {
-            put("shows", buildJsonArray {
+            put(if (id.endsWith("*ANIME")) "anime" else "shows", buildJsonArray {
                 add(buildJsonObject { put("ids", buildJsonObject { put("simkl", simklId) }) })
             })
         }
