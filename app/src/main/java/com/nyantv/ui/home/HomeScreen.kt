@@ -40,20 +40,29 @@ fun HomeScreen(vm: AppViewModel, navController: NavController, onDetailClick: (S
             Spacer(Modifier.height(16.dp))
 
             Column(modifier = Modifier.padding(horizontal = 16.dp)) {
-                Text(
-                    text       = "Hey ${if (loggedIn) profile?.name ?: "" else "Guest"}",
-                    style      = MaterialTheme.typography.headlineMedium,
-                    fontWeight = FontWeight.Bold,
-                    color      = Color.White
+                OutlinedHomeText(
+                    text = "Hey ${if (loggedIn) profile?.name ?: "" else "Guest"}",
+                    style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Bold)
                 )
-                Text(
-                    text  = "What are we watching today?",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = Color.White
+                OutlinedHomeText(
+                    text = "What are we watching today?",
+                    style = MaterialTheme.typography.bodyMedium
                 )
             }
 
             HomeSections(vm = vm, navController = navController, onDetailClick)
         }
+    }
+}
+
+@Composable
+private fun OutlinedHomeText(text: String, style: TextStyle) {
+    Box {
+        Text(
+            text = text,
+            style = style.copy(drawStyle = Stroke(width = 4f, join = PathJoin.Round)),
+            color = Color.Black
+        )
+        Text(text = text, style = style, color = Color.White)
     }
 }
