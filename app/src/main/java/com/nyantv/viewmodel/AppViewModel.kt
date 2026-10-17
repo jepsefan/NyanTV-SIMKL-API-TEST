@@ -135,19 +135,6 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     val trendingMovies: StateFlow<List<Media>> = _trendingMovies.asStateFlow()
     val trendingShows:  StateFlow<List<Media>> = _trendingShows.asStateFlow()
 
-    init {
-        viewModelScope.launch {
-            awaitAll(
-                async { _service.autoLogin() },
-                async { sideService?.autoLogin() }
-            )
-            bindService()
-            loadHome()
-            if (_serviceType.value == ServiceType.SIMKL) refreshSimklLatest()
-        }
-    }
-
-
     // ── Service switching ──────────────────────────────────────────────────────
 
     fun switchService(type: ServiceType) {
@@ -502,6 +489,40 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             else                          -> return null
         }
         return anilist.getAnilistBanner(media)
+    }
+
+    // Run initialization only after ALL StateFlows have been instantiated.
+    // In particular the Simkl login / Latest Unwatched flows are declared below
+    // the older service-management section. Starting collectors before they
+    // exist can crash at launch on a fast first run.
+    init {
+        viewModelScope.launch {
+            val primary = _service
+            val secondary = sideService
+            awaitAll(
+                async {
+                    try {
+                        primary.autoLogin()
+                    } catch (e: kotlinx.coroutines.CancellationException) {
+                        throw e
+                    } catch (e: Exception) {
+                        android.util.Log.e("AppViewModel", "Primary auto-login failed", e)
+                    }
+                },
+                async {
+                    try {
+                        secondary?.autoLogin()
+                    } catch (e: kotlinx.coroutines.CancellationException) {
+                        throw e
+                    } catch (e: Exception) {
+                        android.util.Log.e("AppViewModel", "Secondary auto-login failed", e)
+                    }
+                }
+            )
+            bindService()
+            loadHome()
+            if (_serviceType.value == ServiceType.SIMKL) refreshSimklLatest()
+        }
     }
 
 }
