@@ -30,12 +30,26 @@ data class SimklLatestEpisode(
     val isAnime: Boolean
 )
 
+data class SimklLatestEpisodeMismatch(
+    val api: SimklLatestEpisode,
+    val local: SimklLatestEpisode
+)
+
 data class SimklLatestUnwatchedResult(
     val episodes: List<SimklLatestEpisode>,
     val path: String,
     val returnedShows: Int,
     val returnedAnime: Int,
-    val excludedAnime: Int
+    val excludedAnime: Int,
+    val apiPath: String,
+    val localPath: String,
+    val apiReturnedShows: Int,
+    val localReturnedShows: Int,
+    val apiEpisodes: List<SimklLatestEpisode>,
+    val localEpisodes: List<SimklLatestEpisode>,
+    val onlyInApi: List<SimklLatestEpisode>,
+    val onlyInLocal: List<SimklLatestEpisode>,
+    val differentNext: List<SimklLatestEpisodeMismatch>
 )
 
 private const val SIMKL_API  = "https://api.simkl.com"
@@ -483,76 +497,103 @@ class SimklService(context: Context) : MediaService {
         onlyShows: Boolean,
         localAnimeFiltering: Boolean
     ): SimklLatestUnwatchedResult {
-        // Local filtering uses the same API response whether anime is shown or hidden.
-        // API filtering requests the shows-only endpoint only when anime is excluded.
-        val path = if (onlyShows && !localAnimeFiltering) {
-            "/sync/all-items/shows/watching?next_watch_info=yes"
-        } else {
-            "/sync/all-items?next_watch_info=yes"
-        }
+        // Always retrieve both snapshots for an actual side-by-side comparison.
+        // Both endpoints are read-only. The same eligibility rules below apply to each.
+        val apiPath = "/sync/all-items/shows/watching?next_watch_info=yes"
+        val localPath = "/sync/all-items?next_watch_info=yes"
         if (token.isNullOrBlank()) error("Sign in to Simkl to test the API")
-        val data = getAuthed("$SIMKL_API$path") ?: error("Simkl request failed: $path")
+        val apiData = getAuthed("$SIMKL_API$apiPath")
+            ?: error("API-filtered request failed: $apiPath")
+        val localData = getAuthed("$SIMKL_API$localPath")
+            ?: error("Local-filtered request failed: $localPath")
         val today = java.time.LocalDate.now(java.time.ZoneOffset.UTC).toString()
 
-        fun parse(type: String): List<SimklLatestEpisode> {
+        fun parse(data: JsonObject, type: String): List<SimklLatestEpisode> {
             val entries = data[type] as? JsonArray ?: return emptyList()
             return entries.mapNotNull { raw ->
                 val item = raw as? JsonObject ?: return@mapNotNull null
-                if (item["status"]?.jsonPrimitive?.contentOrNull != "watching") {
+                if ((item["status"] as? JsonPrimitive)?.contentOrNull != "watching") {
                     return@mapNotNull null
                 }
                 val show = item["show"] as? JsonObject ?: return@mapNotNull null
                 val ids = show["ids"] as? JsonObject ?: return@mapNotNull null
-                val simklId = ids["simkl"]?.jsonPrimitive?.contentOrNull
+                val simklId = (ids["simkl"] as? JsonPrimitive)?.contentOrNull
                     ?: return@mapNotNull null
                 val next = item["next_to_watch_info"] as? JsonObject
                     ?: return@mapNotNull null
-                val airedAt = next["date"]?.jsonPrimitive?.contentOrNull
+                val airedAt = (next["date"] as? JsonPrimitive)?.contentOrNull
                     ?: return@mapNotNull null
-                // Simkl returns ISO dates; do not include episodes not yet aired.
                 val day = airedAt.take(10)
                 if (!day.matches(Regex("""\d{4}-\d{2}-\d{2}""")) || day > today) {
                     return@mapNotNull null
                 }
-                val season = next["season"]?.jsonPrimitive?.intOrNull
-                val episode = next["episode"]?.jsonPrimitive?.intOrNull
+                val season = (next["season"] as? JsonPrimitive)?.intOrNull
+                val episode = (next["episode"] as? JsonPrimitive)?.intOrNull
                 val number = if (type == "anime") {
-                    episode?.let { "E$it" } ?: (item["next_to_watch"] as? JsonPrimitive)?.contentOrNull.orEmpty()
+                    episode?.let { "E$it" }
+                        ?: (item["next_to_watch"] as? JsonPrimitive)?.contentOrNull.orEmpty()
                 } else {
                     if (season != null && episode != null) {
                         "S${season.toString().padStart(2, '0')}E${episode.toString().padStart(2, '0')}"
-                    } else item["next_to_watch"]?.jsonPrimitive?.contentOrNull.orEmpty()
+                    } else (item["next_to_watch"] as? JsonPrimitive)?.contentOrNull.orEmpty()
                 }
-                val name = show["title"]?.jsonPrimitive?.contentOrNull ?: "Unknown"
-                val poster = show["poster"]?.jsonPrimitive?.contentOrNull
+                val title = (show["title"] as? JsonPrimitive)?.contentOrNull ?: "Unknown"
+                val poster = (show["poster"] as? JsonPrimitive)?.contentOrNull
                 SimklLatestEpisode(
                     media = Media(
                         id = "$simklId*${if (type == "anime") "ANIME" else "SERIES"}",
-                        title = name,
+                        title = title,
                         poster = poster?.let { "${POSTER_BASE}${it}_m.jpg" },
-                        serviceType = ServiceType.SIMKL,
+                        serviceType = ServiceType.SIMKL
                     ),
                     number = number,
-                    episodeTitle = next["title"]?.jsonPrimitive?.contentOrNull.orEmpty(),
+                    episodeTitle = (next["title"] as? JsonPrimitive)?.contentOrNull.orEmpty(),
                     airDate = day,
                     isAnime = type == "anime"
                 )
-            }
+            }.distinctBy { it.media.id }
         }
 
-        val shows = parse("shows")
-        val anime = parse("anime")
-        val showCount = (data["shows"] as? JsonArray)?.size ?: 0
-        val animeCount = (data["anime"] as? JsonArray)?.size ?: 0
-        val visibleAnime = if (onlyShows) emptyList() else anime
+        val byAirDate = compareByDescending<SimklLatestEpisode> { it.airDate }
+            .thenBy { it.media.title }
+        val apiShows = parse(apiData, "shows").sortedWith(byAirDate)
+        val localShows = parse(localData, "shows").sortedWith(byAirDate)
+        val localAnime = parse(localData, "anime").sortedWith(byAirDate)
+        val apiById = apiShows.associateBy { it.media.id }
+        val localById = localShows.associateBy { it.media.id }
+        val onlyInApi = apiShows.filter { it.media.id !in localById }
+        val onlyInLocal = localShows.filter { it.media.id !in apiById }
+        val differentNext = apiShows.mapNotNull { api ->
+            val local = localById[api.media.id] ?: return@mapNotNull null
+            if (api.number != local.number || api.airDate != local.airDate) {
+                SimklLatestEpisodeMismatch(api, local)
+            } else null
+        }
+
+        // The switch selects which shows list is primary; it does not affect
+        // the comparison. Anime always comes from the full response if enabled.
+        val selectedShows = if (localAnimeFiltering) localShows else apiShows
+        val episodes = (selectedShows + if (onlyShows) emptyList() else localAnime)
+            .distinctBy { it.media.id }.sortedWith(byAirDate)
         return SimklLatestUnwatchedResult(
-            episodes = (shows + visibleAnime).distinctBy { it.media.id }
-                .sortedWith(compareByDescending<SimklLatestEpisode> { it.airDate }
-                    .thenBy { it.media.title }),
-            path = path,
-            returnedShows = showCount,
-            returnedAnime = animeCount,
-            excludedAnime = if (onlyShows) anime.size else 0
+            episodes = episodes,
+            path = if (localAnimeFiltering) localPath else apiPath,
+            returnedShows = if (localAnimeFiltering) {
+                (localData["shows"] as? JsonArray)?.size ?: 0
+            } else {
+                (apiData["shows"] as? JsonArray)?.size ?: 0
+            },
+            returnedAnime = (localData["anime"] as? JsonArray)?.size ?: 0,
+            excludedAnime = if (onlyShows) localAnime.size else 0,
+            apiPath = apiPath,
+            localPath = localPath,
+            apiReturnedShows = (apiData["shows"] as? JsonArray)?.size ?: 0,
+            localReturnedShows = (localData["shows"] as? JsonArray)?.size ?: 0,
+            apiEpisodes = apiShows,
+            localEpisodes = localShows,
+            onlyInApi = onlyInApi,
+            onlyInLocal = onlyInLocal,
+            differentNext = differentNext
         )
     }
 
