@@ -98,7 +98,6 @@ class SimklService(context: Context) : MediaService {
                 token = credentials.accessToken
                 prefs.edit {
                     putString("access_token", credentials.accessToken)
-                    credentials.refreshToken?.let { putString("refresh_token", it) }
                     putLong("token_expires_at", System.currentTimeMillis() + credentials.expiresIn * 1000L)
                 }
                 _isLoggedIn.value = true
@@ -111,19 +110,6 @@ class SimklService(context: Context) : MediaService {
             } catch (e: Exception) {
                 _deviceStatus.value = e.message ?: "Simkl login failed"
             }
-        }
-    }
-
-    private suspend fun refreshDeviceTokenIfNeeded() {
-        val refreshToken = prefs.getString("refresh_token", null) ?: return
-        val expiry = prefs.getLong("token_expires_at", 0)
-        if (expiry == 0L || System.currentTimeMillis() < expiry - 12L * 60L * 60L * 1000L) return
-        val credentials = SimklDeviceAuth.refresh(refreshToken)
-        token = credentials.accessToken
-        prefs.edit {
-            putString("access_token", credentials.accessToken)
-            credentials.refreshToken?.let { putString("refresh_token", it) }
-            putLong("token_expires_at", System.currentTimeMillis() + credentials.expiresIn * 1000L)
         }
     }
 
@@ -168,7 +154,6 @@ class SimklService(context: Context) : MediaService {
         if (token == null) return
         withContext(Dispatchers.IO) {
             runCatching {
-                refreshDeviceTokenIfNeeded()
                 coroutineScope {
                     launch { fetchUserProfile() }
                     launch { refreshUserLists() }
