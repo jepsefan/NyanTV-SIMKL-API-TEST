@@ -24,8 +24,8 @@ jobs:
           SIMKL_CLIENT_ID: ${{ secrets.SIMKL_CLIENT_ID }}
           SIMKL_CLIENT_SECRET: ${{ secrets.SIMKL_CLIENT_SECRET }}
         run: |
-          if [ -z "$SIMKL_CLIENT_ID" ] || [ -z "$SIMKL_CLIENT_SECRET" ]; then
-            echo "Missing SIMKL_CLIENT_ID or SIMKL_CLIENT_SECRET in GitHub Actions Secrets"
+          if [ -z "$SIMKL_CLIENT_ID" ]; then
+            echo "Missing SIMKL_CLIENT_ID in GitHub Actions Secrets"
             exit 1
           fi
           chmod +x gradlew
