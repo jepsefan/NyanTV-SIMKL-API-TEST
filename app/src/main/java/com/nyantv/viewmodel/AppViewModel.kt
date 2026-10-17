@@ -143,6 +143,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             )
             bindService()
             loadHome()
+            if (_serviceType.value == ServiceType.SIMKL) refreshSimklLatest()
         }
     }
 
@@ -154,6 +155,9 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         _serviceType.value = type
         prefs.edit { putString("service_type", type.name) }
 
+        simklLatestJob?.cancel()
+        _simklLatestEpisodes.value = emptyList()
+        _simklLatestDiagnostic.value = "Not loaded"
         serviceJobs.forEach { it.cancel() }
         serviceJobs.clear()
 
@@ -180,6 +184,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             _service.autoLogin()
             sideService?.autoLogin()
             loadHome()
+            if (type == ServiceType.SIMKL) refreshSimklLatest()
             System.gc()
         }
     }
@@ -236,6 +241,46 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun setSyncMalWithAnilist(v: Boolean) {
         _syncMalWithAnilist.value = v
         prefs.edit { putBoolean("sync_mal_anilist", v) }
+    }
+
+    // ── Experimental latest unwatched episodes feed ────────────────────────────
+    private val _simklLatestOnlyShows = MutableStateFlow(
+        prefs.getBoolean("simkl_latest_only_shows", true)
+    )
+    val simklLatestOnlyShows: StateFlow<Boolean> = _simklLatestOnlyShows.asStateFlow()
+    private val _simklLatestEpisodes = MutableStateFlow<List<SimklLatestEpisode>>(emptyList())
+    val simklLatestEpisodes: StateFlow<List<SimklLatestEpisode>> = _simklLatestEpisodes.asStateFlow()
+    private val _simklLatestLoading = MutableStateFlow(false)
+    val simklLatestLoading: StateFlow<Boolean> = _simklLatestLoading.asStateFlow()
+    private val _simklLatestDiagnostic = MutableStateFlow("Not loaded")
+    val simklLatestDiagnostic: StateFlow<String> = _simklLatestDiagnostic.asStateFlow()
+    private var simklLatestJob: kotlinx.coroutines.Job? = null
+
+    fun setSimklLatestOnlyShows(value: Boolean) {
+        _simklLatestOnlyShows.value = value
+        prefs.edit { putBoolean("simkl_latest_only_shows", value) }
+        refreshSimklLatest()
+    }
+
+    fun refreshSimklLatest() {
+        simklLatestJob?.cancel()
+        val simkl = _service as? SimklService ?: return
+        simklLatestJob = viewModelScope.launch {
+            _simklLatestLoading.value = true
+            _simklLatestDiagnostic.value = "Loading..."
+            try {
+                val result = simkl.fetchLatestUnwatchedEpisodes(_simklLatestOnlyShows.value)
+                _simklLatestEpisodes.value = result.episodes
+                _simklLatestDiagnostic.value =
+                    "${result.path} | returned: ${result.returnedShows} shows / ${result.returnedAnime} anime | eligible: ${result.episodes.size}"
+            } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
+                _simklLatestEpisodes.value = emptyList()
+                _simklLatestDiagnostic.value = "API error: ${e.message}"
+            } finally {
+                _simklLatestLoading.value = false
+            }
+        }
     }
 
     // ── Homescreen Lists ───────────────────────────────────────────────────────
