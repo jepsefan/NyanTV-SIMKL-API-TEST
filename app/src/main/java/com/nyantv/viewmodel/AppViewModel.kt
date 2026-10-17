@@ -158,6 +158,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         simklLatestJob?.cancel()
         _simklLatestEpisodes.value = emptyList()
         _simklLatestDiagnostic.value = "Not loaded"
+        (_service as? SimklService)?.cancelDeviceLogin()
         serviceJobs.forEach { it.cancel() }
         serviceJobs.clear()
 
@@ -213,9 +214,13 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         serviceJobs += viewModelScope.launch { _service.recentlyUpdated.collect { _recentlyUpdated.value = it } }
         val simkl = _service as? SimklService
         if (simkl != null) {
+            serviceJobs += viewModelScope.launch { simkl.deviceSession.collect { _simklDeviceSession.value = it } }
+            serviceJobs += viewModelScope.launch { simkl.deviceStatus.collect { _simklDeviceStatus.value = it } }
             serviceJobs += viewModelScope.launch { simkl.trendingMovies.collect { _trendingMovies.value = it } }
             serviceJobs += viewModelScope.launch { simkl.trendingShows.collect  { _trendingShows.value = it } }
         } else {
+            _simklDeviceSession.value = null
+            _simklDeviceStatus.value = ""
             _trendingMovies.value = emptyList()
             _trendingShows.value  = emptyList()
         }
@@ -346,6 +351,20 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     suspend fun fetchDetails(id: String): Media =
         runCatching { _service.fetchDetails(id) }.getOrElse { Media(id = id, title = "?") }
+
+    private val _simklDeviceSession = MutableStateFlow<SimklDeviceSession?>(null)
+    val simklDeviceSession: StateFlow<SimklDeviceSession?> = _simklDeviceSession.asStateFlow()
+    private val _simklDeviceStatus = MutableStateFlow("")
+    val simklDeviceStatus: StateFlow<String> = _simklDeviceStatus.asStateFlow()
+
+    fun startSimklDeviceLogin() {
+        val service = _service as? SimklService ?: return
+        service.startDeviceLogin(viewModelScope)
+    }
+
+    fun cancelSimklDeviceLogin() {
+        (_service as? SimklService)?.cancelDeviceLogin()
+    }
 
     fun login(context: Context) = viewModelScope.launch { _service.login(context) }
 
