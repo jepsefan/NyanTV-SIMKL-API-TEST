@@ -18,6 +18,25 @@ import androidx.core.content.edit
 import androidx.core.net.toUri
 import kotlinx.coroutines.launch
 
+
+// Read-only data for the experimental home feed.
+// This is NOT the full Simkl website's Latest Unwatched Episodes algorithm:
+// the API supplies one next episode for each item in Watching.
+data class SimklLatestEpisode(
+    val media: Media,
+    val number: String,
+    val episodeTitle: String,
+    val airDate: String,
+    val isAnime: Boolean
+)
+
+data class SimklLatestUnwatchedResult(
+    val episodes: List<SimklLatestEpisode>,
+    val path: String,
+    val returnedShows: Int,
+    val returnedAnime: Int
+)
+
 private const val SIMKL_API  = "https://api.simkl.com"
 private const val SIMKL_PREFS = "simkl_prefs"
 private const val POSTER_BASE = "https://wsrv.nl/?url=https://simkl.in/posters/"
@@ -374,6 +393,79 @@ class SimklService(context: Context) : MediaService {
         postJsonAuthed("$SIMKL_API/sync/history/remove", body)
         refreshUserLists()
         setCurrentMedia(id)
+    }
+
+
+    // ── Diagnostic home feed: Simkl next unwatched episodes ────────────────────
+    // This read-only experiment does not change the existing watchlists.
+    suspend fun fetchLatestUnwatchedEpisodes(onlyShows: Boolean): SimklLatestUnwatchedResult {
+        val path = if (onlyShows) {
+            "/sync/all-items/shows/watching?next_watch_info=yes"
+        } else {
+            "/sync/all-items?next_watch_info=yes"
+        }
+        if (token.isNullOrBlank()) error("Sign in to Simkl to test the API")
+        val data = getAuthed("$SIMKL_API$path") ?: error("Simkl request failed: $path")
+        val today = java.time.LocalDate.now(java.time.ZoneOffset.UTC).toString()
+
+        fun parse(type: String): List<SimklLatestEpisode> {
+            val entries = data[type] as? JsonArray ?: return emptyList()
+            return entries.mapNotNull { raw ->
+                val item = raw as? JsonObject ?: return@mapNotNull null
+                if (item["status"]?.jsonPrimitive?.contentOrNull != "watching") {
+                    return@mapNotNull null
+                }
+                val show = item["show"] as? JsonObject ?: return@mapNotNull null
+                val ids = show["ids"] as? JsonObject ?: return@mapNotNull null
+                val simklId = ids["simkl"]?.jsonPrimitive?.contentOrNull
+                    ?: return@mapNotNull null
+                val next = item["next_to_watch_info"] as? JsonObject
+                    ?: return@mapNotNull null
+                val airedAt = next["date"]?.jsonPrimitive?.contentOrNull
+                    ?: return@mapNotNull null
+                // Simkl returns ISO dates; do not include episodes not yet aired.
+                val day = airedAt.take(10)
+                if (!day.matches(Regex("""\d{4}-\d{2}-\d{2}""")) || day > today) {
+                    return@mapNotNull null
+                }
+                val season = next["season"]?.jsonPrimitive?.intOrNull
+                val episode = next["episode"]?.jsonPrimitive?.intOrNull
+                val number = if (type == "anime") {
+                    episode?.let { "E$it" } ?: item["next_to_watch"]?.jsonPrimitive?.contentOrNull.orEmpty()
+                } else {
+                    if (season != null && episode != null) {
+                        "S${season.toString().padStart(2, '0')}E${episode.toString().padStart(2, '0')}"
+                    } else item["next_to_watch"]?.jsonPrimitive?.contentOrNull.orEmpty()
+                }
+                val name = show["title"]?.jsonPrimitive?.contentOrNull ?: "Unknown"
+                val poster = show["poster"]?.jsonPrimitive?.contentOrNull
+                SimklLatestEpisode(
+                    media = Media(
+                        id = "$simklId*${if (type == "anime") "ANIME" else "SERIES"}",
+                        title = name,
+                        poster = poster?.let { "${POSTER_BASE}${it}_m.jpg" },
+                        serviceType = ServiceType.SIMKL,
+                    ),
+                    number = number,
+                    episodeTitle = next["title"]?.jsonPrimitive?.contentOrNull.orEmpty(),
+                    airDate = day,
+                    isAnime = type == "anime"
+                )
+            }
+        }
+
+        val shows = parse("shows")
+        val anime = parse("anime")
+        val showCount = (data["shows"] as? JsonArray)?.size ?: 0
+        val animeCount = (data["anime"] as? JsonArray)?.size ?: 0
+        return SimklLatestUnwatchedResult(
+            episodes = (shows + anime).distinctBy { it.media.id }
+                .sortedWith(compareByDescending<SimklLatestEpisode> { it.airDate }
+                    .thenBy { it.media.title }),
+            path = path,
+            returnedShows = showCount,
+            returnedAnime = animeCount
+        )
     }
 
     // ── HTTP helpers ───────────────────────────────────────────────────────────
