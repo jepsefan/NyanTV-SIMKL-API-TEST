@@ -238,6 +238,7 @@ fun AccountsScreen(vm: AppViewModel, navController: NavController) {
         val simklPlanMovies  by vm.simklShowPlanMovies.collectAsStateWithLifecycle()
         val simklContSeries  by vm.simklShowContSeries.collectAsStateWithLifecycle()
         val simklPlanSeries  by vm.simklShowPlanSeries.collectAsStateWithLifecycle()
+        val simklShowAnime   by vm.simklShowAnime.collectAsStateWithLifecycle()
 
         SectionCard(
             title = "Manage AniList Homescreen",
@@ -267,6 +268,8 @@ fun AccountsScreen(vm: AppViewModel, navController: NavController) {
                 HomescreenToggleRow("Continue Watching (Series)", simklContSeries) { vm.setSimklShowContSeries(it) }
                 HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.1f))
                 HomescreenToggleRow("Planned (Series)", simklPlanSeries) { vm.setSimklShowPlanSeries(it) }
+                HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.1f))
+                HomescreenToggleRow("Simkl Anime", simklShowAnime) { vm.setSimklShowAnime(it) }
             }
         ) {}
     }
