@@ -218,11 +218,11 @@ class SimklService(context: Context) : MediaService {
     override suspend fun fetchDetails(id: String): Media = withContext(Dispatchers.IO) {
         val simklId = id.substringBefore("*")
         val isMovie = id.substringAfter("*") == "MOVIE"
-        val type    = if (isMovie) "movies" else "tv"
+        val type    = if (isMovie) "movies" else if (id.endsWith("*ANIME")) "anime" else "tv"
         runCatching {
             val data = getRaw("$SIMKL_API/$type/$simklId?extended=full&client_id=${BuildConfig.SIMKL_CLIENT_ID}")
                 ?: return@withContext Media(id = id, title = "?")
-            data.toSimklMediaFull(isMovie = isMovie) ?: Media(id = id, title = "?")
+            data.toSimklMediaFull(isMovie = isMovie)?.copy(id = id, format = if (id.endsWith("*ANIME")) "ANIME" else if (isMovie) "MOVIE" else "TV") ?: Media(id = id, title = "?")
         }.getOrElse { Media(id = id, title = "?") }
     }
 
@@ -248,7 +248,8 @@ class SimklService(context: Context) : MediaService {
         coroutineScope {
             val movies = async { fetchUserMovies() }
             val shows  = async { fetchUserShows() }
-            _animeList.value = movies.await() + shows.await()
+            val anime = async { fetchUserAnime() }
+            _animeList.value = movies.await() + shows.await() + anime.await()
         }
     }
 
@@ -335,6 +336,29 @@ class SimklService(context: Context) : MediaService {
                     isMovie        = false
                 )
             } ?: emptyList()
+        }
+    }
+
+
+    private suspend fun fetchUserAnime(): List<TrackedMedia> {
+        val data = getAuthed("$SIMKL_API/sync/all-items/anime") ?: return emptyList()
+        val entries = data["anime"] as? JsonArray ?: return emptyList()
+        return entries.mapNotNull { raw ->
+            val item = raw as? JsonObject ?: return@mapNotNull null
+            val show = item["show"] as? JsonObject ?: return@mapNotNull null
+            val ids = show["ids"] as? JsonObject ?: return@mapNotNull null
+            val id = (ids["simkl"] as? JsonPrimitive)?.contentOrNull ?: return@mapNotNull null
+            TrackedMedia(
+                id = "${id}*ANIME",
+                title = (show["title"] as? JsonPrimitive)?.contentOrNull ?: "?",
+                poster = (show["poster"] as? JsonPrimitive)?.contentOrNull
+                    ?.let { "${POSTER_BASE}${it}_m.jpg" },
+                watchingStatus = simklStatusToAL((item["status"] as? JsonPrimitive)?.contentOrNull),
+                episodeCount = (item["watched_episodes_count"] as? JsonPrimitive)?.intOrNull,
+                totalEpisodes = (item["total_episodes_count"] as? JsonPrimitive)?.intOrNull,
+                isMovie = false,
+                isAnime = true
+            )
         }
     }
 
