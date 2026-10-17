@@ -124,6 +124,8 @@ dependencies {
     // Images
     implementation("io.coil-kt:coil-compose:2.7.0")
 
+    implementation("com.google.zxing:core:3.5.3")
+
     // OAuth browser
     implementation("androidx.browser:browser:1.10.0")
 
