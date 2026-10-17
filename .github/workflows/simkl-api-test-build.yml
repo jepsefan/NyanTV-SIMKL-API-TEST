@@ -2,7 +2,7 @@ name: Simkl API test debug APK
 on:
   push:
     branches:
-      - feature/simkl-latest-unwatched-api-toggle
+      - beta/simkl-latest-unwatched
   workflow_dispatch:
 
 jobs:
