@@ -42,7 +42,8 @@ data class TrackedMedia(
     val totalEpisodes: Int? = null,
     val averageScore: Int? = null,
     val score: Float? = null,
-    val isMovie: Boolean? = null
+    val isMovie: Boolean? = null,
+    val isAnime: Boolean = false
 )
 
 data class Profile(
