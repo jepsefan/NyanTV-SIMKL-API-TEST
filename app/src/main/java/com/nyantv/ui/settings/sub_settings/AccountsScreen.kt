@@ -15,11 +15,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.asImageBitmap
-import androidx.compose.foundation.Image
-import androidx.compose.ui.graphics.ImageBitmap
-import android.graphics.Bitmap
 import com.google.zxing.BarcodeFormat
+import androidx.compose.foundation.Canvas
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import com.google.zxing.qrcode.QRCodeWriter
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -58,21 +57,43 @@ fun AccountsScreen(vm: AppViewModel, navController: NavController) {
                 ) {
                     val session = simklSession
                     if (session != null) {
-                        val qrBitmap = remember(session.qrUrl) {
+                        // Draw the QR directly in Compose. The previous bitmap path
+                        // silently hid all rendering failures via getOrNull().
+                        val qrResult = remember(session.qrUrl) {
                             runCatching {
-                                val bits = QRCodeWriter().encode(session.qrUrl, BarcodeFormat.QR_CODE, 300, 300)
-                                val pixels = IntArray(300 * 300) { index ->
-                                    if (bits[index % 300, index / 300]) android.graphics.Color.BLACK
-                                    else android.graphics.Color.WHITE
-                                }
-                                Bitmap.createBitmap(pixels, 300, 300, Bitmap.Config.ARGB_8888)
-                                    .apply { setPixels(pixels, 0, 300, 0, 0, 300, 300) }
-                                    .asImageBitmap()
-                            }.getOrNull()
+                                require(session.qrUrl.startsWith("https://")) { "Invalid QR URL" }
+                                QRCodeWriter().encode(session.qrUrl, BarcodeFormat.QR_CODE, 0, 0)
+                            }
                         }
-                        qrBitmap?.let { bitmap ->
-                            Image(bitmap = bitmap, contentDescription = "Simkl activation QR code",
-                                modifier = Modifier.size(220.dp))
+                        qrResult.onSuccess { matrix ->
+                            Box(
+                                modifier = Modifier.size(210.dp).background(Color.White).padding(10.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Canvas(modifier = Modifier.fillMaxSize()) {
+                                    val cellSize = minOf(size.width / matrix.width, size.height / matrix.height)
+                                    val offsetX = (size.width - matrix.width * cellSize) / 2f
+                                    val offsetY = (size.height - matrix.height * cellSize) / 2f
+                                    for (y in 0 until matrix.height) {
+                                        for (x in 0 until matrix.width) {
+                                            if (matrix[x, y]) {
+                                                drawRect(
+                                                    color = Color.Black,
+                                                    topLeft = Offset(offsetX + x * cellSize, offsetY + y * cellSize),
+                                                    size = Size(cellSize + 0.15f, cellSize + 0.15f)
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        qrResult.onFailure { error ->
+                            Text(
+                                "QR code could not be rendered: ${error.javaClass.simpleName}",
+                                color = MaterialTheme.colorScheme.error,
+                                style = MaterialTheme.typography.bodySmall
+                            )
                         }
                         Text("Scan the QR code, then approve this device in Simkl.", style = MaterialTheme.typography.bodyMedium)
                         Text(session.qrUrl, style = MaterialTheme.typography.bodySmall)
